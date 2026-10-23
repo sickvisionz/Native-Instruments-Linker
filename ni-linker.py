@@ -6,26 +6,42 @@ def create_registry_entries(root_folder, xml_file):
     # Parse the XML file
     tree = ET.parse(xml_file)
     root = tree.getroot()
+    products = root.findall('Product')
 
     # Iterate through the folders in the root directory
-    for folder_name in os.listdir(root_folder):
+    root_folders = os.listdir(root_folder)
+    for folder_name in root_folders:
         folder_path = os.path.join(root_folder, folder_name)
         if os.path.isdir(folder_path):
             # Find the corresponding <Product> element in the XML file
+            product_name = None
             product_element = None
-            for product in root.findall('Product'):
-                if product.find('Name').text == folder_name:
+            for product in products:
+                product_name = product.find('Name').text
+                # straight match?
+                if product_name == folder_name:
+                    product_element = product
+                    break
+                # library match?
+                if product_name == folder_name.replace(' Library', ''):
                     product_element = product
                     break
 
+            # Create the registry key if this folder is a product folder
             if product_element is not None:
-                # Create the registry key
-                key_path = r"SOFTWARE\Native Instruments\{0}".format(product_element.find('RegKey').text)
+                reg_key = product_element.find('RegKey').text
+                key_path = r"SOFTWARE\Native Instruments\{0}".format(reg_key)
                 try:
                     key = winreg.CreateKey(winreg.HKEY_LOCAL_MACHINE, key_path)
                     winreg.SetValueEx(key, "ContentDir", 0, winreg.REG_SZ, folder_path)
-                    winreg.SetValueEx(key, "HU", 0, winreg.REG_SZ, product_element.find('ProductSpecific/HU').text)
-                    winreg.SetValueEx(key, "JDX", 0, winreg.REG_SZ, product_element.find('ProductSpecific/JDX').text)
+
+                    HU = product_element.find('ProductSpecific/HU')
+                    if HU is not None:
+                        winreg.SetValueEx(key, "HU", 0, winreg.REG_SZ, HU.text)
+
+                    JDX = product_element.find('ProductSpecific/JDX')
+                    if JDX is not None:
+                        winreg.SetValueEx(key, "JDX", 0, winreg.REG_SZ, JDX.text)
 
                     relevance_element = product_element.find('Relevance')
                     if relevance_element is not None:
@@ -40,11 +56,11 @@ def create_registry_entries(root_folder, xml_file):
                         winreg.SetValueEx(key, "Visibility", 0, winreg.REG_DWORD, 3)
 
                     winreg.CloseKey(key)
-                    print(f"Created registry entry for {folder_name}")
+                    print(f"Created registry entry for {product_name}")
                 except Exception as e:
-                    print(f"Error creating registry entry for {folder_name}: {e}")
+                    print(f"Error creating registry entry for {product_name}: {e}")
             else:
-                print(f"No matching <Product> element found for {folder_name}")
+                print(f'No matching <Product> element found for folder "{folder_name}"')
 
 # Prompt the user for the root folder and XML file
 root_folder = input("Enter the root folder path: ")
